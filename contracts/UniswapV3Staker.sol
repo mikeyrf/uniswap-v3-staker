@@ -310,6 +310,93 @@ contract UniswapV3Staker is
         emit RewardClaimed(to, reward);
     }
 
+    /// @inheritdoc IUniswapV3Staker
+    function pendingRewards(PendingRewardsParams memory params) external override view returns (uint128 pending) {
+        pending = rewards[params.rewardToken][params.user];
+
+        (address poolAddress, int24 tickLower, int24 tickUpper, ) =
+            _getPositionDetails(params.tokenId);
+
+        bytes32 incentiveId =
+            IncentiveHelper.getIncentiveId(
+                params.creator,
+                params.rewardToken,
+                poolAddress,
+                params.startTime,
+                params.endTime,
+                params.claimDeadline
+            );
+
+        pending = uint128(SafeMath.add(
+            pending,
+            _calcAccumulatedRewards(
+                incentiveId,
+                params.tokenId,
+                params.startTime,
+                params.endTime,
+                poolAddress,
+                tickLower,
+                tickUpper
+            )
+        ));
+    }
+
+    /// Calculates any rewards that have accrued since last stake/unstake
+    function _calcAccumulatedRewards(
+        bytes32 incentiveId,
+        uint256 tokenId,
+        uint32 startTime,
+        uint32 endTime,
+        address poolAddress,
+        int24 tickLower,
+        int24 tickUpper
+    ) internal view returns (uint128 reward) {
+        Incentive memory incentive = incentives[incentiveId];
+        Stake memory stake = stakes[tokenId][incentiveId];
+
+        if (poolAddress != address(0) && stake.exists == true && incentive.rewardToken != address(0)) {
+            (, uint160 secondsPerLiquidityInsideX128, ) =
+                IUniswapV3Pool(poolAddress).snapshotCumulativesInside(
+                    tickLower,
+                    tickUpper
+                );
+
+            uint160 secondsInPeriodX128 =
+                uint160(
+                    SafeMath.mul(
+                        secondsPerLiquidityInsideX128 -
+                            stake.secondsPerLiquidityInitialX128,
+                        stake.liquidity
+                    )
+                );
+
+            uint160 totalSecondsUnclaimedX128 =
+                uint160(
+                    SafeMath.mul(
+                        Math.max(endTime, block.timestamp) -
+                            startTime,
+                        FixedPoint128.Q128
+                    ) - incentive.totalSecondsClaimedX128
+                );
+
+            uint256 rewardRate =
+                FullMath.mulDiv(
+                    incentive.totalRewardUnclaimed,
+                    FixedPoint128.Q128,
+                    totalSecondsUnclaimedX128
+                );
+
+            reward =
+                uint128(
+                    FullMath.mulDiv(
+                        secondsInPeriodX128,
+                        rewardRate,
+                        FixedPoint128.Q128
+                    )
+                );
+        }
+    }
+
     function _stakeToken(StakeTokenParams memory params) internal {
         (address poolAddress, int24 tickLower, int24 tickUpper, ) =
             _getPositionDetails(params.tokenId);

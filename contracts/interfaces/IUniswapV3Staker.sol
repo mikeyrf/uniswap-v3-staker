@@ -137,4 +137,24 @@ interface IUniswapV3Staker {
     /// @param rewardToken The address of the token being distributed as a reward
     /// @param to The address where claimed rewards will be sent to
     function claimReward(address rewardToken, address to) external;
+
+    /// @param creator The address that created this incentive
+    /// @param rewardToken The address of the token being distributed as a reward
+    /// @param tokenId The address of the Uniswap V3 pool
+    /// @param startTime The time when the incentive program begins
+    /// @param endTime The time when rewards stop accruing
+    /// @param claimDeadline Time after which LPs can no longer claim rewards (and incentiveCreator can end the incentive and receive unclaimed rewards)
+    /// @param user The user address accruing the rewards
+    struct PendingRewardsParams {
+        address creator;
+        address rewardToken;
+        uint256 tokenId;
+        uint32 startTime;
+        uint32 endTime;
+        uint32 claimDeadline;
+        address user;
+    }
+
+    /// @notice Displays pending accrued `rewardToken` rewards from the contract for a `user`
+    function pendingRewards(PendingRewardsParams memory params) external view returns (uint128 pending);
 }
